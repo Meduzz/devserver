@@ -1,0 +1,41 @@
+<html>
+
+<head>
+    <title>Dev server - pages</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css"
+        integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous" />
+
+    <script src="https://cdn.jsdelivr.net/npm/riot@3.13/riot.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/riot-route@3.1.4/dist/route.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/showdown@1.9.0/dist/showdown.min.js"></script>
+    <script src="/static/js/pages.js"></script>
+    <script src="/static/js/menu.js"></script>
+</head>
+
+<body>
+    <div class="container">
+        <nav class="navbar navbar-dark bg-dark navbar-expand-lg mb-4">
+            <a class="navbar-brand" href="/">Devserver</a>
+        </nav>
+        <div class="row">
+            <div id="menu" class="col-3">
+            </div>
+            <div id="app" class="col-9">
+            </div>
+        </div>
+    </div>
+    <script>
+        riot.mount('#menu', 'menu')
+
+        route(function (id, a, b) {
+            riot.mount('#app', id || 'list', { page: a })
+        })
+
+        route.start(true)
+    </script>
+</body>
+
+</html>
