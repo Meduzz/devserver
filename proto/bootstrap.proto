@@ -1,0 +1,83 @@
+syntax = "proto3";
+
+option go_package = "bootstrap/";
+
+service Bootstrap {
+    rpc hello(HelloQuery) returns (HelloDocument);
+    rpc session(SessionCommand) returns (SessionDocument);
+}
+
+message SessionCommand {
+    string session = 1;
+}
+
+message SessionDocument {
+    string session = 1;
+    BootstrapDTO bootstrap = 2;
+    ErrorDTO error = 3;
+}
+
+message HelloQuery {}
+
+message HelloDocument {
+    string session = 1;
+    BootstrapDTO bootstrap = 2;
+    ErrorDTO error = 3;
+}
+
+message ErrorDTO {
+    Error error = 1;
+    string message = 2;
+}
+
+enum Error {
+    AUTHENTICATION = 0;
+}
+
+message BootstrapDTO {
+    repeated ModuleDTO modules = 1;
+}
+
+message ModuleDTO {
+    repeated EndpointDTO endpoints = 1;
+    repeated CommandDTO commands = 2;
+}
+
+message EndpointDTO {
+    string method = 1;
+    string path = 2;
+    HandlerDTO handler = 3;
+}
+
+message CommandDTO {
+    string name = 1;
+    repeated CommandDTO children = 2; // open up for subcommands / can of worms
+    HandlerDTO handler = 3;
+}
+
+message FlagDTO {
+    string name = 1;
+    string usage = 2;
+    string short = 3;
+    FlagTarget target = 4;
+}
+
+enum FlagTarget {
+    OTHER = 0;
+    FILE = 1;
+    DIR = 2;
+}
+
+/*
+ * pwd - get current dir
+ * file_read - read content from file
+ * file_write - write content to file
+ * proxy - forward the http request
+ * db_write - store in internal db
+ * db_read - read from internal db
+ * chain - a chain of handlers
+ * call - http call an endpoint and chain the response to 1 child handler
+ */
+message HandlerDTO {
+    
+}
