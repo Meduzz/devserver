@@ -1,0 +1,120 @@
+{
+    "components":[
+        {
+            "name": "navbar",
+            "label": "Navbar",
+            "slot": false,
+            "properties": [
+                {
+                    "name":"items",
+                    "label":"Items",
+                    "type":"array",
+                    "subtype":"struct",
+                    "definition": [
+                        {
+                            "name":"href",
+                            "label":"URL",
+                            "type":"string"
+                        },{
+                            "name":"label",
+                            "label":"Label",
+                            "type":"string"
+                        }
+                    ]
+                },{
+                    "name": "brand",
+                    "label": "Brand",
+                    "type": "string"
+                }
+            ]
+        },{
+            "name": "page",
+            "label": "Page",
+            "slot": true,
+            "properties": []
+        },{
+            "name":"list",
+            "label":"List",
+            "slot": false,
+            "properties":[
+                {
+                    "name":"items",
+                    "type":"array",
+                    "subtype":"string",
+                    "definition":[
+                        {
+                            "name":"href",
+                            "label":"URL",
+                            "type":"string"
+                        },{
+                            "name":"label",
+                            "label":"Label",
+                            "type":"string"
+                        }
+                    ]
+                }
+            ]
+        },{
+            "name": "columns",
+            "label": "Columns",
+            "slot": true,
+            "properties": []
+        },{
+            "name": "columnShrink",
+            "label": "Shrinking column",
+            "slot": true,
+            "properties": []
+        },{
+            "name": "columnGrow",
+            "label": "Growing column",
+            "slot": true,
+            "properties": []
+        },{
+            "name": "routable",
+            "label": "Route",
+            "slot": true,
+            "properties": [
+                {
+                    "name":"url",
+                    "label":"Path",
+                    "slot":true
+                }
+            ]
+        },{
+            "name": "column",
+            "label": "Column",
+            "slot": true,
+            "properties": []
+        },{
+            "name": "text",
+            "label": "Text",
+            "slot": false,
+            "properties": [
+                {
+                    "name":"text",
+                    "label":"Text/HTML",
+                    "type":"string"
+                }, {
+                    "name":"html",
+                    "label":"IsHTML",
+                    "type":"bool"
+                }
+            ]
+        }, {
+            "name": "markdown",
+            "label": "Markdown",
+            "slot": false,
+            "properties": [
+                {
+                    "name":"markdown",
+                    "label":"Markdown",
+                    "type":"string"
+                }, {
+                    "name": "editing",
+                    "label": "Editor",
+                    "type": "bool"
+                }
+            ]
+        }
+    ]
+}

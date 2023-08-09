@@ -1,0 +1,33 @@
+{
+    "components":[
+        {
+            "name": "httpLoader",
+            "label": "HTTP Loader",
+            "slot": true,
+            "properties": [
+                {
+                    "name":"method",
+                    "label":"Method",
+                    "type":"string"
+                }, {
+                    "name":"url",
+                    "label":"URL",
+                    "type":"string"
+                }, {
+                    "name":"format",
+                    "label":"Format",
+                    "type":"enum",
+                    "values":[
+                        "GET",
+                        "POST"
+                    ]
+                }, {
+                    "name":"body",
+                    "label":"Body",
+                    "type":"struct",
+                    "definition": {}
+                }
+            ]
+        }
+    ]
+}
