@@ -6,6 +6,7 @@ import (
 
 type (
 	cms struct {
-		app *model.App
+		app        *model.App
+		configFile string
 	}
 )

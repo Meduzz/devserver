@@ -1,78 +1,42 @@
 package services
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"os/signal"
 
-	"github.com/Meduzz/devserver/model"
-	"github.com/Meduzz/helper/fp/slice"
-	"github.com/gofiber/fiber/v3"
+	"github.com/Meduzz/helper/service"
+	"github.com/Meduzz/helper/service/web"
+	"github.com/gin-gonic/gin"
 )
 
-/*
-TODO
-* Switch from gin to echo
-*/
+func init() {
+	web.SetEngine(server)
+}
 
 var (
-	services []model.Service
-	server   *fiber.App
+	server *gin.Engine = gin.Default()
 )
 
-func Register(it model.Service) {
-	services = append(services, it)
+func Register(it service.Service) {
+	service.AddService(it)
 }
 
 func Start(port int) error {
 	// create the webserver
-	server = fiber.New()
-
-	go handleShutdown()
-
-	// iterate the registered services and start them
-	err := slice.Fold(services, nil, func(in model.Service, agg error) error {
-		if agg != nil {
-			return agg
-		}
-
-		err := in.Start()
-
-		if err != nil {
-			return err
-		}
-
-		controller, ok := in.(model.Controller)
-
-		if ok {
-			controller.Setup(server)
-		}
-
-		return nil
-	})
+	err := service.Start()
 
 	if err != nil {
 		return err
 	}
 
-	return server.Listen(fmt.Sprintf(":%d", port))
+	go handleShutdown()
+
+	return server.Run(fmt.Sprintf(":%d", port))
 }
 
 func Stop() error {
-	return slice.Fold(services, nil, func(in model.Service, agg error) error {
-		err := in.Stop()
-
-		if err != nil {
-			if agg != nil {
-				return errors.Join(agg, err)
-			}
-
-			return err
-		}
-
-		return agg
-	})
+	return service.Stop()
 }
 
 func handleShutdown() {

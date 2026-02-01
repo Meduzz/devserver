@@ -3,204 +3,169 @@ package endpoints
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
+	"os"
+	"path"
+	"strings"
 
-	"github.com/Meduzz/devserver/collections"
-	"github.com/Meduzz/devserver/filedb"
 	"github.com/Meduzz/devserver/model"
+	"github.com/Meduzz/helper/fp/result"
 	"github.com/Meduzz/helper/fp/slice"
-	"github.com/gofiber/fiber/v3"
-	"github.com/gofiber/fiber/v3/middleware/proxy"
-	"github.com/valyala/fasthttp"
+	"github.com/Meduzz/helper/service"
+	"github.com/Meduzz/helper/service/web"
+	"github.com/gin-gonic/gin"
 )
 
-/*
-TODO
-1. Start all services and let them register their endpoint.
-2. Call endpoint.Start() to register all endpoints with webserver
-3. Start webserver
-
-We need to handle these kinds of endpoints.
-- Dir (static)
-  > Delegate to the webframework.
-- Dynamic (collections)
-  > Handle with specific code
-  >> The api collection will be proxy though
-- Proxy
-  > Delegate to the webframework
-- File
-  > Delegate to the webframework
-*/
-
 type (
-	endpointService struct {
-		endpoints   []*model.Endpoint
-		collections collections.CollectionsService
+	endpoint struct {
+		kind   model.EndpointKind
+		path   string
+		drop   string
+		proxy  *proxy
+		static *static
+	}
+
+	proxy struct {
+		host url.URL
+	}
+
+	static struct {
+		dir   string
+		index string
+	}
+
+	EndpointService struct {
+		endpoints []*endpoint
 	}
 )
 
 var (
-	_ model.Service    = (*endpointService)(nil)
-	_ model.Controller = (*endpointService)(nil)
+	_ service.Service = &EndpointService{}
+	_ web.WebApi      = &EndpointService{}
 )
 
-/*
-TODO
-*/
-
-func NewEndpointService(endpoints []*model.Endpoint, collections collections.CollectionsService) model.Service {
-	return &endpointService{
-		endpoints:   endpoints,
-		collections: collections,
-	}
+func NewEndpointService() *EndpointService {
+	return &EndpointService{}
 }
 
-func (e *endpointService) Start() error {
+func (e *EndpointService) Start() error {
 	return nil
 }
 
-func (e *endpointService) Stop() error {
+func (e *EndpointService) Stop() error {
 	return nil
 }
 
-func (e *endpointService) Setup(srv *fiber.App) error {
-	slice.Fold(e.endpoints, nil, func(ep *model.Endpoint, agg error) error {
-		if agg != nil {
-			return agg
-		}
-
-		switch ep.Kind {
-		case model.PageEndpointKind:
-			config, err := fromJson[model.PageEndpoint](ep.Config)
-
-			if err != nil {
-				return err
-			}
-
-			srv.Get(ep.Path, func(ctx fiber.Ctx) error {
-				return ctx.SendFile(config.File)
-			})
+func (e *EndpointService) Setup(srv *gin.Engine) {
+	staticRegistered := false
+	slice.ForEach(e.endpoints, func(ep *endpoint) {
+		switch ep.kind {
 		case model.ProxyEndpointKind:
-			config, err := fromJson[model.ProxyEndpoint](ep.Config)
-
-			if err != nil {
-				return err
-			}
-
-			srv.All(ep.Path, proxy.Forward(config.Host, &fasthttp.Client{
-				NoDefaultUserAgentHeader: true,
-				DisablePathNormalizing:   true,
-			}))
-		case model.CollectionEndpointKind:
-			config, err := fromJson[model.CollectionEndpoint](ep.Config)
-
-			if err != nil {
-				return err
-			}
-
-			col := e.collections.Lookup(config.Collection)
-
-			switch col.Kind {
-			case model.ApiCollectionKind:
-				colCfg, err := fromJson[model.ApiCollection](col.Config)
-
-				if err != nil {
-					return err
-				}
-
-				srv.All(ep.Path, proxy.Forward(colCfg.Host, &fasthttp.Client{
-					NoDefaultUserAgentHeader: true,
-					DisablePathNormalizing:   true,
-				}))
-			case model.FileCollectionKind:
-				colCfg, err := fromJson[model.FileCollection](col.Config)
-
-				if err != nil {
-					return err
-				}
-
-				db, err := filedb.NewFileDB(colCfg.File, colCfg.ID, col.Fields)
-
-				if err != nil {
-					return err
-				}
-
-				url := fmt.Sprintf("%s/:id", ep.Path)
-				srv.Get(ep.Path, func(ctx fiber.Ctx) error {
-					req := make(map[string]any)
-					err := ctx.Bind().JSON(req)
-
-					if err != nil {
-						return err
-					}
-
-					rows, err := db.List()
-
-					if err != nil {
-						return err
-					}
-
-					return ctx.JSON(rows, "application/json")
-				})
-				srv.Post(ep.Path, func(ctx fiber.Ctx) error {
-					req := make(map[string]any)
-					err := ctx.Bind().JSON(req)
-
-					if err != nil {
-						return err
-					}
-
-					res, err := db.Create(req)
-
-					if err != nil {
-						return err
-					}
-
-					return ctx.JSON(res)
-				})
-				srv.Put(url, func(ctx fiber.Ctx) error {
-					req := make(map[string]any)
-					err := ctx.Bind().JSON(req)
-
-					if err != nil {
-						return err
-					}
-
-					id := ctx.Params("id", "0")
-					res, err := db.Update(id, req)
-
-					if err != nil {
-						return err
-					}
-
-					return ctx.JSON(res, "application/json")
-				})
-				srv.Delete(url, func(ctx fiber.Ctx) error {
-					id := ctx.Params("id", "0")
-					return db.Delete(id)
-				})
-			case model.StaticCollectionKind:
-				colCfg, err := fromJson[model.StaticCollection](col.Config)
-
-				if err != nil {
-					return err
-				}
-
-				srv.Get(ep.Path)
+			srv.Any(ep.path, proxyTo(ep))
+		case model.StaticEndpointKind:
+			if !staticRegistered {
+				srv.NoRoute(e.serveStatic())
+				staticRegistered = true
 			}
 		}
+	})
+}
 
-		return nil
+func (e *EndpointService) Offer(appDir string, app *model.App) error {
+	ops := result.Batch(app.Endpoints, func(ep *model.Endpoint) (*endpoint, error) {
+		switch ep.Kind {
+		case model.StaticEndpointKind:
+			s, err := loadStatic(appDir, ep)
+
+			if err != nil {
+				return nil, err
+			}
+
+			path := ep.Path
+
+			return &endpoint{
+				kind:   ep.Kind,
+				path:   path,
+				static: s,
+				drop:   ep.Drop,
+			}, nil
+		case model.ProxyEndpointKind:
+			p, err := loadProxy(ep)
+
+			if err != nil {
+				return nil, err
+			}
+
+			path := ep.Path
+
+			if path == "" || path == "/" {
+				path = "/*file"
+			}
+
+			if path != "/" && !strings.HasSuffix(path, "/*file") {
+				path = fmt.Sprintf("%s/*file", path)
+			}
+
+			return &endpoint{
+				kind:  ep.Kind,
+				path:  path,
+				proxy: p,
+				drop:  ep.Drop,
+			}, nil
+		default:
+			return nil, fmt.Errorf("unknown endpoint kind: %s", ep.Kind)
+		}
 	})
 
+	eps, err := ops.Get()
+
+	if err != nil {
+		return err
+	}
+
+	e.endpoints = append(e.endpoints, eps...)
+
 	return nil
 }
 
-func fromJson[T any](data json.RawMessage) (*T, error) {
-	it := new(T)
-	err := json.Unmarshal(data, it)
+func loadStatic(appDir string, ep *model.Endpoint) (*static, error) {
+	cfg := &model.StaticEndpoint{}
+	err := json.Unmarshal(ep.Config, cfg)
 
 	if err != nil {
 		return nil, err
+	}
+
+	wd, err := os.Getwd()
+
+	if err != nil {
+		return nil, err
+	}
+
+	it := &static{
+		dir:   path.Join(wd, appDir, cfg.Dir),
+		index: cfg.SPA,
+	}
+
+	return it, nil
+}
+
+func loadProxy(ep *model.Endpoint) (*proxy, error) {
+	cfg := &model.ProxyEndpoint{}
+	err := json.Unmarshal(ep.Config, cfg)
+
+	if err != nil {
+		return nil, err
+	}
+
+	downstream, err := url.Parse(cfg.Host)
+
+	if err != nil {
+		return nil, err
+	}
+
+	it := &proxy{
+		host: *downstream,
 	}
 
 	return it, nil

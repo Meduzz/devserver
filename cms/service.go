@@ -1,23 +1,27 @@
 package cms
 
 import (
+	"encoding/json"
+	"fmt"
+
+	"github.com/Meduzz/devserver/app"
+	"github.com/Meduzz/devserver/cms/pages"
 	"github.com/Meduzz/devserver/model"
 	"github.com/Meduzz/helper/fp/slice"
-	"github.com/gofiber/fiber/v3"
+	"github.com/Meduzz/helper/service"
+	"github.com/Meduzz/helper/service/web"
+	"github.com/gin-gonic/gin"
 )
-
-/*
-TODO
-*/
 
 var (
-	_ model.Service    = (*cms)(nil)
-	_ model.Controller = (*cms)(nil)
+	_ service.Service = (*cms)(nil)
+	_ web.WebApi      = (*cms)(nil)
 )
 
-func NewCMS(app *model.App) model.Service {
+func NewCMS(configFile string, app *model.App) service.Service {
 	return &cms{
-		app: app,
+		app:        app,
+		configFile: configFile,
 	}
 }
 
@@ -28,115 +32,113 @@ func (c *cms) Start() error {
 
 func (c *cms) Stop() error {
 	println("CMS stopping")
-	return nil
+	return app.Store(c.app, c.configFile)
 }
 
-func (c *cms) Setup(srv *fiber.App) error {
-	// TODO static
+func (c *cms) Setup(srv *gin.Engine) {
+	srv.GET("/", c.endpointsPage)               // gml
+	srv.GET("/editor", c.endpointsEditor)       // gml
+	srv.GET("/editor/:name", c.endpointsEditor) // gml
 
-	// setup endpoints
-	epApi := srv.Group("/api/endpoints")
-	coApi := srv.Group("/api/collections")
+	srv.POST("/editor", c.endpointCreate)
+	srv.POST("/editor/:name", c.endpointUpdate)
 
-	epApi.Get("", c.listEndpoints)
-	epApi.Post("", c.createEndpoint)
-	epApi.Put("", c.updateEndpoint)
-	epApi.Delete("/:name", c.removeEndponit)
-
-	coApi.Get("", c.listCollections)
-	coApi.Post("", c.createCollection)
-	coApi.Put("", c.updateCollection)
-	coApi.Delete("/:name", c.removeCollection)
-
-	return nil
+	srv.DELETE("/endpoint/:name", c.endpointRemove)
 }
 
-func (c *cms) listEndpoints(ctx fiber.Ctx) error {
-	return ctx.JSON(c.app.Endpoints)
+func (c *cms) endpointsPage(ctx *gin.Context) {
+	tag := pages.Endpoints(c.app)
+	render(ctx, tag)
 }
 
-func (c *cms) createEndpoint(ctx fiber.Ctx) error {
-	req := &model.Endpoint{}
-	err := ctx.Bind().JSON(req)
+func (c *cms) endpointsEditor(ctx *gin.Context) {
+	name := ctx.Param("name")
+	var ep *model.Endpoint
 
-	if err != nil {
-		return err
+	if name != "" {
+		// load ep
+		ep = slice.Head(slice.Filter(c.app.Endpoints, func(e *model.Endpoint) bool {
+			return e.Name == name
+		}))
 	}
 
-	c.app.Endpoints = append(c.app.Endpoints, req)
-
-	return ctx.JSON(req)
+	tag := pages.Editor(c.app, ep)
+	render(ctx, tag)
 }
 
-func (c *cms) updateEndpoint(ctx fiber.Ctx) error {
-	req := &model.Endpoint{}
-	err := ctx.Bind().JSON(req)
+func (c *cms) endpointCreate(ctx *gin.Context) {
+	ep := &model.Endpoint{}
+	proxy := &model.ProxyEndpoint{}
+	static := &model.StaticEndpoint{}
 
-	if err != nil {
-		return err
+	ep.Name = ctx.PostForm("name")
+	ep.Kind = model.EndpointKind(ctx.PostForm("kind"))
+	ep.Path = ctx.PostForm("path")
+	ep.Drop = ctx.PostForm("drop")
+
+	proxy.Host = ctx.PostForm("host")
+
+	static.Dir = ctx.PostForm("dir")
+	static.SPA = ctx.PostForm("spa")
+
+	if ep.Kind == model.ProxyEndpointKind {
+		bs, _ := json.Marshal(proxy)
+		ep.Config = bs
+	} else {
+		bs, _ := json.Marshal(static)
+		ep.Config = bs
 	}
 
-	c.app.Endpoints = slice.Map(c.app.Endpoints, func(ep *model.Endpoint) *model.Endpoint {
-		if ep.Name == req.Name {
-			return req
-		} else {
-			return ep
-		}
-	})
-
-	return ctx.JSON(req)
+	c.app.Endpoints = append(c.app.Endpoints, ep)
+	ctx.Header("HX-Redirect", "/")
+	ctx.Redirect(303, "/")
 }
 
-func (c *cms) removeEndponit(ctx fiber.Ctx) error {
-	name := ctx.Params("name")
+func (c *cms) endpointUpdate(ctx *gin.Context) {
+	name := ctx.Param("name")
+
+	ep := slice.Head(slice.Filter(c.app.Endpoints, func(e *model.Endpoint) bool {
+		return e.Name == name
+	}))
+
+	if ep == nil {
+		ctx.AbortWithError(404, fmt.Errorf("no endpoint with name %s exists", name))
+		return
+	}
+
+	ep.Path = ctx.PostForm("path")
+	ep.Drop = ctx.PostForm("drop")
+
+	if ep.Kind == model.ProxyEndpointKind {
+		proxy := &model.ProxyEndpoint{}
+		json.Unmarshal(ep.Config, proxy)
+
+		proxy.Host = ctx.PostForm("host")
+
+		bs, _ := json.Marshal(proxy)
+		ep.Config = bs
+	} else {
+		static := &model.StaticEndpoint{}
+		json.Unmarshal(ep.Config, static)
+
+		static.Dir = ctx.PostForm("dir")
+		static.SPA = ctx.PostForm("spa")
+
+		bs, _ := json.Marshal(static)
+		ep.Config = bs
+	}
+
+	ctx.Header("HX-Redirect", "/")
+	ctx.Redirect(303, "/")
+}
+
+func (c *cms) endpointRemove(ctx *gin.Context) {
+	name := ctx.Param("name")
+
 	c.app.Endpoints = slice.Filter(c.app.Endpoints, func(e *model.Endpoint) bool {
 		return e.Name != name
 	})
 
-	return nil
-}
-
-func (c *cms) listCollections(ctx fiber.Ctx) error {
-	return ctx.JSON(c.app.Collections)
-}
-
-func (c *cms) createCollection(ctx fiber.Ctx) error {
-	req := &model.Collection{}
-	err := ctx.Bind().JSON(req)
-
-	if err != nil {
-		return err
-	}
-
-	c.app.Collections = append(c.app.Collections, req)
-
-	return ctx.JSON(req)
-}
-
-func (c *cms) updateCollection(ctx fiber.Ctx) error {
-	req := &model.Collection{}
-	err := ctx.Bind().JSON(req)
-
-	if err != nil {
-		return err
-	}
-
-	c.app.Collections = slice.Map(c.app.Collections, func(ep *model.Collection) *model.Collection {
-		if ep.Name == req.Name {
-			return req
-		} else {
-			return ep
-		}
-	})
-
-	return ctx.JSON(req)
-}
-
-func (c *cms) removeCollection(ctx fiber.Ctx) error {
-	name := ctx.Params("name")
-	c.app.Collections = slice.Filter(c.app.Collections, func(e *model.Collection) bool {
-		return e.Name != name
-	})
-
-	return nil
+	ctx.Header("HX-Redirect", "/")
+	ctx.Redirect(303, "/")
 }

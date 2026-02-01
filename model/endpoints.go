@@ -2,46 +2,30 @@ package model
 
 import "encoding/json"
 
-/*
-TODO
-* Static, flag to allow browsing static files?
-* Proxy, settings to drop/add path?
-* Page, setting for layout?
-*/
-
 type (
-	EKind string
+	EndpointKind string
 
+	// TODO some endpoints will need to be able to tell how they need to be exposed (later).
 	Endpoint struct {
-		Kind   EKind           `json:"kind"`
+		Kind   EndpointKind    `json:"kind"`
 		Name   string          `json:"name"`
 		Path   string          `json:"path"`
-		Config json.RawMessage `json:"config"` // *Static|*Collection|*Proxy|*Page
+		Drop   string          `json:"drop,omitempty"` // drop prefix
+		Config json.RawMessage `json:"config"`         // *Static|*Proxy
 	}
 
+	// TODO allow exposing the content of a zip-file as static resource
 	StaticEndpoint struct {
-		Dir       string `json:"dir"`
-		SPA       *bool  `json:"spa"`
-		Browsable *bool  `json:"browsable"`
-	}
-
-	CollectionEndpoint struct {
-		Collection string `json:"collection"`
+		Dir string `json:"dir"`
+		SPA string `json:"spa"` // index file
 	}
 
 	ProxyEndpoint struct {
 		Host string `json:"host"`
 	}
-
-	PageEndpoint struct {
-		File string `json:"file"`
-		// TODO postprocessors for markdown?
-	}
 )
 
 const (
-	StaticEndpointKind     = EKind("static")     // {static.path}/ -> /{collection.path}
-	CollectionEndpointKind = EKind("collection") // /{collection.path} <- crud
-	ProxyEndpointKind      = EKind("proxy")      // /{collection.path} -> {proxy.host}
-	PageEndpointKind       = EKind("page")       // /{collection.path} <- {page.file}
+	StaticEndpointKind = EndpointKind("static") // {static.path}/ -> /{fs.path}
+	ProxyEndpointKind  = EndpointKind("proxy")  // /{path} -> {proxy.host}
 )

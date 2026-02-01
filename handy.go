@@ -4,6 +4,7 @@ import (
 	"log"
 
 	"github.com/Meduzz/commando"
+	_ "github.com/Meduzz/devserver/cmd"
 )
 
 func main() {
